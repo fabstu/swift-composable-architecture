@@ -10,6 +10,14 @@ struct RootView: View {
       Form {
         Section(header: Text("Getting started")) {
           NavigationLink(
+            "Smart View Store",
+            destination: SmartViewStoreView(
+              store: SmartViewStore.example
+            )
+          )
+          
+          
+          NavigationLink(
             "Basics",
             destination: CounterDemoView(
               store: self.store.scope(

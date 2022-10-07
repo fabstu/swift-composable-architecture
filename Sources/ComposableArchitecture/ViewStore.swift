@@ -83,10 +83,40 @@ public final class ViewStore<State, Action>: ObservableObject {
   ) {
     self._send = { store.send($0) }
     self._state = CurrentValueRelay(store.state.value)
+    let comparisonState = ComparisonState()
+    self.comparisonState = comparisonState
     self.viewCancellable = store.state
       .removeDuplicates(by: isDuplicate)
-      .sink { [weak objectWillChange = self.objectWillChange, weak _state = self._state] in
-        guard let objectWillChange = objectWillChange, let _state = _state else { return }
+      .sink { [weak objectWillChange = self.objectWillChange, weak _state = self._state, weak comparisonState = comparisonState] in
+        guard let objectWillChange = objectWillChange, let _state = _state, let comparisonState = comparisonState else { return }
+        
+        print("ComparisonState ID: \(comparisonState.id)")
+        
+        if !comparisonState.oneIsInequatable {
+          var foundInequal = false
+          print("Comparing values count=\(comparisonState.accessedValues.count)")
+          for (keypath, value) in comparisonState.accessedValues {
+            print("Comparing value \(String(describing: value))")
+            // Did value change?
+            let equatableValue = $0[keyPath: keypath] as! any Equatable
+            
+            let currentValue = AnyEquatable(equatableValue)
+            guard currentValue == value else {
+              foundInequal = true
+              break
+            }
+          }
+          
+          print("Comparison finished. equal: \(!foundInequal)")
+          
+          if !foundInequal {
+            print("Did not find inequal")
+            // Do not update the view when no accessed value changed.
+            _state.value = $0
+            return
+          }
+        }
+        
         objectWillChange.send()
         _state.value = $0
       }
@@ -95,6 +125,7 @@ public final class ViewStore<State, Action>: ObservableObject {
   init(_ viewStore: ViewStore<State, Action>) {
     self._send = viewStore._send
     self._state = viewStore._state
+    self.comparisonState = viewStore.comparisonState
     self.objectWillChange = viewStore.objectWillChange
     self.viewCancellable = viewStore.viewCancellable
   }
@@ -132,10 +163,32 @@ public final class ViewStore<State, Action>: ObservableObject {
   public var state: State {
     self._state.value
   }
+  
+  let comparisonState: ComparisonState
+  
+  class ComparisonState {
+    let id = UUID().uuidString
+    
+    var accessedValues: [AnyKeyPath: AnyEquatable] = [:]
+    var oneIsInequatable = false
+  }
 
   /// Returns the resulting value of a given key path.
   public subscript<Value>(dynamicMember keyPath: KeyPath<State, Value>) -> Value {
-    self._state.value[keyPath: keyPath]
+    comparisonState.oneIsInequatable = true
+    return self._state.value[keyPath: keyPath]
+  }
+  
+  /// Returns the resulting value of a given key path.
+  public subscript<Value: Equatable>(dynamicMember keyPath: KeyPath<State, Value>) -> Value {
+    let value = self._state.value[keyPath: keyPath]
+    
+    /// Store what values were accessed.
+    print("Accessed value \(String(describing: value)) \(comparisonState.id)")
+    comparisonState.accessedValues[keyPath] = AnyEquatable(value)
+    print("Accessed values, new count: \(comparisonState.accessedValues.count)")
+    
+    return value
   }
 
   /// Sends an action to the store.
