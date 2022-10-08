@@ -107,6 +107,8 @@ final class ViewStoreTests: XCTestCase {
     let viewStore = ViewStore(store)
 
     var results: [Int] = []
+    
+    _ = viewStore.state
 
     viewStore.objectWillChange
       .sink { _ in results.append(viewStore.state) }

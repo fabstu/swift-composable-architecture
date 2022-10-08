@@ -90,34 +90,10 @@ public final class ViewStore<State, Action>: ObservableObject {
       .sink { [weak objectWillChange = self.objectWillChange, weak _state = self._state, weak comparisonState = comparisonState] in
         guard let objectWillChange = objectWillChange, let _state = _state, let comparisonState = comparisonState else { return }
         
-        print("ComparisonState ID: \(comparisonState.id)")
-        
-        if !comparisonState.oneIsInequatable {
-          var foundInequal = false
-          print("Comparing values count=\(comparisonState.accessedValues.count)")
-          for (keypath, value) in comparisonState.accessedValues {
-            print("Comparing value \(String(describing: value))")
-            // Did value change?
-            let equatableValue = $0[keyPath: keypath] as! any Equatable
-            
-            let currentValue = AnyEquatable(equatableValue)
-            guard currentValue == value else {
-              foundInequal = true
-              break
-            }
-          }
-          
-          print("Comparison finished. equal: \(!foundInequal)")
-          
-          if !foundInequal {
-            print("Did not find inequal")
-            // Do not update the view when no accessed value changed.
-            _state.value = $0
-            return
-          }
+        if !comparisonState.areEqual(state: $0) {
+          objectWillChange.send()
         }
         
-        objectWillChange.send()
         _state.value = $0
       }
   }
@@ -161,17 +137,11 @@ public final class ViewStore<State, Action>: ObservableObject {
 
   /// The current state.
   public var state: State {
-    self._state.value
+    comparisonState.oneIsInequatable = true
+    return self._state.value
   }
   
   let comparisonState: ComparisonState
-  
-  class ComparisonState {
-    let id = UUID().uuidString
-    
-    var accessedValues: [AnyKeyPath: AnyEquatable] = [:]
-    var oneIsInequatable = false
-  }
 
   /// Returns the resulting value of a given key path.
   public subscript<Value>(dynamicMember keyPath: KeyPath<State, Value>) -> Value {
@@ -393,12 +363,35 @@ public final class ViewStore<State, Action>: ObservableObject {
   ///   - valueToAction: A function that transforms the binding's value into an action that can be
   ///     sent to the store.
   /// - Returns: A binding.
+  public func binding<Value: Equatable>(
+    get: @escaping (State) -> Value,
+    send valueToAction: @escaping (Value) -> Action
+  ) -> Binding<Value> {
+    ObservedObject(wrappedValue: self)
+      .projectedValue[
+        get: HashableWrapper(rawValue: {
+          let value = get($0)
+          // Record the value that was accessed. Can't record this elsewhere, because
+          // at the creation of the binding the value that will be accessed is not determined yet.
+          self.comparisonState.accessedByFunction.append(.init(fn: get, value: value))
+          return value
+        }),
+        send: HashableWrapper(rawValue: valueToAction)]
+  }
+  
   public func binding<Value>(
     get: @escaping (State) -> Value,
     send valueToAction: @escaping (Value) -> Action
   ) -> Binding<Value> {
     ObservedObject(wrappedValue: self)
-      .projectedValue[get: .init(rawValue: get), send: .init(rawValue: valueToAction)]
+      .projectedValue[
+        get: {
+          return HashableWrapper(rawValue: {
+            self.comparisonState.oneIsInequatable = true
+            return get($0)
+          })
+        }(),
+        send: HashableWrapper(rawValue: valueToAction)]
   }
 
   /// Derives a binding from the store that prevents direct writes to state and instead sends
@@ -612,3 +605,59 @@ private struct HashableWrapper<Value>: Hashable {
   static func == (lhs: Self, rhs: Self) -> Bool { false }
   func hash(into hasher: inout Hasher) {}
 }
+
+extension ViewStore {
+  class ComparisonState {
+    let id = UUID().uuidString
+    
+    var accessedValues: [AnyKeyPath: AnyEquatable] = [:]
+    var accessedByFunction: [FunctionAccess] = []
+    var oneIsInequatable = false
+    
+    struct FunctionAccess {
+      var fn: ((State) -> AnyEquatable)
+      var value: AnyEquatable
+      
+      init<T: Equatable>(fn: @escaping (State) -> T, value: T) {
+        self.fn = {
+          return AnyEquatable(fn($0))
+        }
+        self.value = AnyEquatable(value)
+      }
+    }
+    
+    func areEqual(state: State) -> Bool {
+      print("ComparisonState ID: \(id)")
+      
+      guard !oneIsInequatable else {
+        print("Comparison finished. equal: false")
+        return false
+      }
+      
+      print("Comparing by keypath count=\(accessedValues.count)")
+      for (keypath, value) in accessedValues {
+        print("Comparing value \(String(describing: value))")
+        // Did value change?
+        let equatableValue = state[keyPath: keypath] as! any Equatable
+        
+        let currentValue = AnyEquatable(equatableValue)
+        guard currentValue == value else {
+          print("Comparison finished. equal: false")
+          return false
+        }
+      }
+      
+      print("Comparing by function count=\(accessedByFunction.count)")
+      for accessByFunc in accessedByFunction {
+        let currentValue = accessByFunc.fn(state)
+        guard currentValue == accessByFunc.value else {
+          print("Comparison finished. equal: false")
+          return false
+        }
+      }
+      print("Comparison: equal")
+      return true
+    }
+  }
+}
+
