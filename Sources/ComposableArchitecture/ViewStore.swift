@@ -484,11 +484,28 @@ public final class ViewStore<State, Action>: ObservableObject {
     self.binding(send: { _ in action })
   }
 
+  private subscript<Value: Equatable>(
+    get state: HashableWrapper<(State) -> Value>,
+    send action: HashableWrapper<(Value) -> Action>
+  ) -> Value {
+    get {
+      let value = state.rawValue(self.state)
+      // Record the value that was accessed. Can't record this elsewhere, because
+      // at the creation of the binding the value that will be accessed is not determined yet.
+      self.comparisonState.accessedByFunction.append(.init(fn: state.rawValue, value: value))
+      return value
+    }
+    set { self.send(action.rawValue(newValue)) }
+  }
+  
   private subscript<Value>(
     get state: HashableWrapper<(State) -> Value>,
     send action: HashableWrapper<(Value) -> Action>
   ) -> Value {
-    get { state.rawValue(self.state) }
+    get {
+      self.comparisonState.oneIsInequatable = true
+      return state.rawValue(self.state)
+    }
     set { self.send(action.rawValue(newValue)) }
   }
 }
