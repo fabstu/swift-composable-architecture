@@ -56,13 +56,22 @@ import SwiftUI
 public struct SwitchStore<State, Action, Content: View>: View {
   public let store: Store<State, Action>
   public let content: Content
+  private let file: StaticString
+  private let line: UInt
+  private let prefix: String?
 
   init(
     store: Store<State, Action>,
-    @ViewBuilder content: () -> Content
+    @ViewBuilder content: () -> Content,
+    file: StaticString,
+    line: UInt,
+    prefix: String?
   ) {
     self.store = store
     self.content = content()
+    self.file = file
+    self.line = line
+    self.prefix = prefix
   }
 
   public var body: some View {
@@ -77,6 +86,9 @@ public struct CaseLet<EnumState, EnumAction, CaseState, CaseAction, Content: Vie
   public let toCaseState: (EnumState) -> CaseState?
   public let fromCaseAction: (CaseAction) -> EnumAction
   public let content: (Store<CaseState, CaseAction>) -> Content
+  private let file: StaticString
+  private let line: UInt
+  private let prefix: String?
 
   /// Initializes a ``CaseLet`` view that computes content depending on if a store of enum state
   /// matches a particular case.
@@ -90,11 +102,17 @@ public struct CaseLet<EnumState, EnumAction, CaseState, CaseAction, Content: Vie
   public init(
     state toCaseState: @escaping (EnumState) -> CaseState?,
     action fromCaseAction: @escaping (CaseAction) -> EnumAction,
-    @ViewBuilder then content: @escaping (Store<CaseState, CaseAction>) -> Content
+    @ViewBuilder then content: @escaping (Store<CaseState, CaseAction>) -> Content,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String = "CaseLet"
   ) {
     self.toCaseState = toCaseState
     self.fromCaseAction = fromCaseAction
     self.content = content
+    self.file = file
+    self.line = line
+    self.prefix = prefix
   }
 
   public var body: some View {
@@ -103,7 +121,10 @@ public struct CaseLet<EnumState, EnumAction, CaseState, CaseAction, Content: Vie
         state: self.toCaseState,
         action: self.fromCaseAction
       ),
-      then: self.content
+      then: self.content,
+      file: file,
+      line: line,
+      prefix: prefix
     )
   }
 }
@@ -119,12 +140,18 @@ extension CaseLet where EnumAction == CaseAction {
   ///     that is visible only when the switch store's state matches.
   public init(
     state toCaseState: @escaping (EnumState) -> CaseState?,
-    @ViewBuilder then content: @escaping (Store<CaseState, CaseAction>) -> Content
+    @ViewBuilder then content: @escaping (Store<CaseState, CaseAction>) -> Content,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String = "CaseLet"
   ) {
     self.init(
       state: toCaseState,
       action: { $0 },
-      then: content
+      then: content,
+      file: file,
+      line: line,
+      prefix: prefix
     )
   }
 }
@@ -159,7 +186,10 @@ extension SwitchStore {
         CaseLet<State, Action, State1, Action1, Content1>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -172,15 +202,15 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else {
           content.1
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<State1, Action1, Content1>(
@@ -200,10 +230,10 @@ extension SwitchStore {
       >
     >
   {
-    self.init(store) {
+    self.init(store, content: {
       content()
       Default { _ExhaustivityCheckView<State, Action>(file: file, fileID: fileID, line: line) }
-    }
+    }, file: file, line: line)
   }
 
   public init<State1, Action1, Content1, State2, Action2, Content2, DefaultContent>(
@@ -214,7 +244,10 @@ extension SwitchStore {
         CaseLet<State, Action, State2, Action2, Content2>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -230,8 +263,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -239,8 +272,8 @@ extension SwitchStore {
         } else {
           content.2
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<State1, Action1, Content1, State2, Action2, Content2>(
@@ -290,7 +323,10 @@ extension SwitchStore {
         CaseLet<State, Action, State3, Action3, Content3>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -309,8 +345,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -320,8 +356,8 @@ extension SwitchStore {
         } else {
           content.3
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<State1, Action1, Content1, State2, Action2, Content2, State3, Action3, Content3>(
@@ -329,6 +365,7 @@ extension SwitchStore {
     file: StaticString = #file,
     fileID: StaticString = #fileID,
     line: UInt = #line,
+    prefix: String? = "SwitchStore",
     @ViewBuilder content: () -> TupleView<
       (
         CaseLet<State, Action, State1, Action1, Content1>,
@@ -354,12 +391,12 @@ extension SwitchStore {
     >
   {
     let content = content()
-    self.init(store) {
+    self.init(store, content: {
       content.value.0
       content.value.1
       content.value.2
       Default { _ExhaustivityCheckView<State, Action>(file: file, fileID: fileID, line: line) }
-    }
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<
@@ -378,7 +415,10 @@ extension SwitchStore {
         CaseLet<State, Action, State4, Action4, Content4>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -400,8 +440,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -413,8 +453,8 @@ extension SwitchStore {
         } else {
           content.4
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<
@@ -427,6 +467,7 @@ extension SwitchStore {
     file: StaticString = #file,
     fileID: StaticString = #fileID,
     line: UInt = #line,
+    prefix: String? = "SwitchStore",
     @ViewBuilder content: () -> TupleView<
       (
         CaseLet<State, Action, State1, Action1, Content1>,
@@ -456,13 +497,13 @@ extension SwitchStore {
     >
   {
     let content = content()
-    self.init(store) {
+    self.init(store, content: {
       content.value.0
       content.value.1
       content.value.2
       content.value.3
       Default { _ExhaustivityCheckView<State, Action>(file: file, fileID: fileID, line: line) }
-    }
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<
@@ -483,7 +524,10 @@ extension SwitchStore {
         CaseLet<State, Action, State5, Action5, Content5>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -508,8 +552,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -523,8 +567,8 @@ extension SwitchStore {
         } else {
           content.5
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<
@@ -601,7 +645,10 @@ extension SwitchStore {
         CaseLet<State, Action, State6, Action6, Content6>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -629,8 +676,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -646,8 +693,8 @@ extension SwitchStore {
         } else {
           content.6
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<
@@ -732,7 +779,10 @@ extension SwitchStore {
         CaseLet<State, Action, State7, Action7, Content7>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -763,8 +813,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -782,8 +832,8 @@ extension SwitchStore {
         } else {
           content.7
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<
@@ -876,7 +926,10 @@ extension SwitchStore {
         CaseLet<State, Action, State8, Action8, Content8>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -910,8 +963,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -931,8 +984,8 @@ extension SwitchStore {
         } else {
           content.8
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<
@@ -949,6 +1002,7 @@ extension SwitchStore {
     file: StaticString = #file,
     fileID: StaticString = #fileID,
     line: UInt = #line,
+    prefix: String? = "SwitchStore",
     @ViewBuilder content: () -> TupleView<
       (
         CaseLet<State, Action, State1, Action1, Content1>,
@@ -1033,7 +1087,10 @@ extension SwitchStore {
         CaseLet<State, Action, State9, Action9, Content9>,
         Default<DefaultContent>
       )
-    >
+    >,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   )
   where
     Content == WithViewStore<
@@ -1070,8 +1127,8 @@ extension SwitchStore {
     >
   {
     let content = content().value
-    self.init(store: store) {
-      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }) { viewStore in
+    self.init(store: store, content: {
+      return WithViewStore(store, removeDuplicates: { enumTag($0) == enumTag($1) }, content: { viewStore in
         if content.0.toCaseState(viewStore.state) != nil {
           content.0
         } else if content.1.toCaseState(viewStore.state) != nil {
@@ -1093,8 +1150,8 @@ extension SwitchStore {
         } else {
           content.9
         }
-      }
-    }
+      }, file: file, line: line, prefix: prefix)
+    }, file: file, line: line, prefix: prefix)
   }
 
   public init<

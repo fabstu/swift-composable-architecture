@@ -277,6 +277,7 @@ struct RootView: View {
       .navigationTitle("Case Studies")
       .onAppear { ViewStore(self.store).send(.onAppear) }
     }
+    .tcaSettings(.withRerenderLogging(.statistics))
   }
 }
 

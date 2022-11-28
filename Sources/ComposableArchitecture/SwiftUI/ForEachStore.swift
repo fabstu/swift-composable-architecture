@@ -93,7 +93,10 @@ public struct ForEachStore<
   ///   - content: A function that can generate content given a store of an element.
   public init<EachContent>(
     _ store: Store<IdentifiedArray<ID, EachState>, (ID, EachAction)>,
-    @ViewBuilder content: @escaping (Store<EachState, EachAction>) -> EachContent
+    @ViewBuilder content: @escaping (Store<EachState, EachAction>) -> EachContent,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "ForEachStore"
   )
   where
     Data == IdentifiedArray<ID, EachState>,
@@ -105,8 +108,8 @@ public struct ForEachStore<
     self.content = WithViewStore(
       store,
       observe: { $0.ids },
-      removeDuplicates: areOrderedSetsDuplicates
-    ) { viewStore in
+      removeDuplicates: areOrderedSetsDuplicates,
+      content: { viewStore in
       ForEach(viewStore.state, id: \.self) { id -> EachContent in
         // NB: We cache elements here to avoid a potential crash where SwiftUI may re-evaluate
         //     views for elements no longer in the collection.
@@ -123,7 +126,7 @@ public struct ForEachStore<
           )
         )
       }
-    }
+      }, file: file, line: line, prefix: prefix)
   }
 
   public var body: some View {

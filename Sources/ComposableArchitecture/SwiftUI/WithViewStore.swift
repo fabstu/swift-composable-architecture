@@ -118,18 +118,21 @@ public struct WithViewStore<ViewState, ViewAction, Content: View>: View {
     private var previousState: (ViewState) -> ViewState?
   #endif
   @ObservedObject private var viewStore: ViewStore<ViewState, ViewAction>
+  @Environment(\.tcaSettings) var settings
 
   init(
     store: Store<ViewState, ViewAction>,
     removeDuplicates isDuplicate: @escaping (ViewState, ViewState) -> Bool,
     content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
     self.content = content
     #if DEBUG
       self.file = file
       self.line = line
+      self.prefix = prefix
       var previousState: ViewState? = nil
       self.previousState = { currentState in
         defer { previousState = currentState }
@@ -153,31 +156,68 @@ public struct WithViewStore<ViewState, ViewAction, Content: View>: View {
 
   public var body: Content {
     #if DEBUG
-      if let prefix = self.prefix {
-        var stateDump = ""
-        customDump(self.viewStore.state, to: &stateDump, indent: 2)
-        let difference =
-          self.previousState(self.viewStore.state)
-          .map {
-            diff($0, self.viewStore.state).map { "(Changed state)\n\($0)" }
-              ?? "(No difference in state detected)"
-          }
-          ?? "(Initial state)\n\(stateDump)"
-        func typeName(_ type: Any.Type) -> String {
-          var name = String(reflecting: type)
-          if let index = name.firstIndex(of: ".") {
-            name.removeSubrange(...index)
-          }
-          return name
+    var prefix = "WithViewStore"
+    if let givenPrefix = self.prefix {
+      prefix = givenPrefix
+    }
+      
+    if settings.enableWithViewStoreRerenderLogging != nil || TCASettings.settings.enableWithViewStoreRerenderLogging != nil {
+      var stateDump = ""
+      customDump(self.viewStore.state, to: &stateDump, indent: 2)
+      let differenceNonNilIfIsNotInitial =
+      self.previousState(self.viewStore.state)
+        .map {
+          diff($0, self.viewStore.state).map { "(Changed state)\n\($0)" }
+          ?? "(No difference in state detected)"
         }
-        print(
-          """
-          \(prefix.isEmpty ? "" : "\(prefix): ")\
-          WithViewStore<\(typeName(ViewState.self)), \(typeName(ViewAction.self)), _>\
-          @\(self.file):\(self.line) \(difference)
-          """
+      
+      let difference = differenceNonNilIfIsNotInitial ?? "(Initial state)\n\(stateDump)"
+      let isInitialStateDiff = differenceNonNilIfIsNotInitial == nil
+      
+      func typeName(_ type: Any.Type) -> String {
+        var name = String(reflecting: type)
+        if let index = name.firstIndex(of: ".") {
+          name.removeSubrange(...index)
+        }
+        return name
+      }
+      
+      var loggingSettings: TCASettings.RendererLogging
+      if let recursiveRenderLogging = settings.enableWithViewStoreRerenderLogging {
+        loggingSettings = recursiveRenderLogging
+      } else if let globalRenderLogging = TCASettings.settings.enableWithViewStoreRerenderLogging {
+        loggingSettings = globalRenderLogging
+      } else {
+        loggingSettings = .statistics // default when .debug() is used.
+      }
+      
+      switch loggingSettings {
+      case .raw:
+        print("\(prefix) \(self.file)#\(self.line) <\(typeName(ViewState.self)), \(typeName(ViewAction.self)), ...> \(difference)")
+      case .statistics:
+        // When we are not watching to print the statistics, the user will never see the statistics.
+        //
+        // But.. .task{} takes time that the re-rendering does not give. We can't check whether a printer is running because it may only
+        // be started after the first re-render cycle is done in the first place.
+        
+        //        guard RenderedStatistics.watcherIsRunning else {
+        //          print("warning: can't print statistics due to no one watching them. falling back to .raw output")
+        //          print("\(prefix) \(self.file)#\(self.line) <\(typeName(ViewState.self)), \(typeName(ViewAction.self)), ...> \(difference)")
+        //          break
+        //        }
+        
+        RenderedStatistics.add(
+          prefix: prefix,
+          file: self.file,
+          line: self.line,
+          viewStateType: typeName(ViewState.self),
+          viewActionType: typeName(ViewAction.self),
+          difference: difference,
+          isInitialStateDiff: isInitialStateDiff,
+          hideInitialStateDiffs: settings.initialStateHideDiffs
         )
       }
+    }
     #endif
     return self.content(ViewStore(self.viewStore))
   }
@@ -258,14 +298,16 @@ public struct WithViewStore<ViewState, ViewAction, Content: View>: View {
     removeDuplicates isDuplicate: @escaping (ViewState, ViewState) -> Bool,
     @ViewBuilder content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
     self.init(
       store: store.scope(state: toViewState, action: fromViewAction),
       removeDuplicates: isDuplicate,
       content: content,
       file: file,
-      line: line
+      line: line,
+      prefix: prefix
     )
   }
 
@@ -343,14 +385,16 @@ public struct WithViewStore<ViewState, ViewAction, Content: View>: View {
     removeDuplicates isDuplicate: @escaping (ViewState, ViewState) -> Bool,
     @ViewBuilder content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
     self.init(
       store: store.scope(state: toViewState),
       removeDuplicates: isDuplicate,
       content: content,
       file: file,
-      line: line
+      line: line,
+      prefix: prefix
     )
   }
 
@@ -423,14 +467,16 @@ public struct WithViewStore<ViewState, ViewAction, Content: View>: View {
     removeDuplicates isDuplicate: @escaping (ViewState, ViewState) -> Bool,
     @ViewBuilder content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
     self.init(
       store: store,
       removeDuplicates: isDuplicate,
       content: content,
       file: file,
-      line: line
+      line: line,
+      prefix: prefix
     )
   }
 }
@@ -511,14 +557,16 @@ extension WithViewStore where ViewState: Equatable, Content: View {
     send fromViewAction: @escaping (ViewAction) -> Action,
     @ViewBuilder content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
     self.init(
       store: store.scope(state: toViewState, action: fromViewAction),
       removeDuplicates: ==,
       content: content,
       file: file,
-      line: line
+      line: line,
+      prefix: prefix
     )
   }
 
@@ -595,14 +643,16 @@ extension WithViewStore where ViewState: Equatable, Content: View {
     observe toViewState: @escaping (State) -> ViewState,
     @ViewBuilder content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
     self.init(
       store: store.scope(state: toViewState),
       removeDuplicates: ==,
       content: content,
       file: file,
-      line: line
+      line: line,
+      prefix: prefix
     )
   }
 
@@ -672,9 +722,10 @@ extension WithViewStore where ViewState: Equatable, Content: View {
     _ store: Store<ViewState, ViewAction>,
     @ViewBuilder content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
-    self.init(store, removeDuplicates: ==, content: content, file: file, line: line)
+    self.init(store, removeDuplicates: ==, content: content, file: file, line: line, prefix: prefix)
   }
 }
 
@@ -709,9 +760,10 @@ extension WithViewStore where ViewState == Void, Content: View {
     _ store: Store<ViewState, ViewAction>,
     @ViewBuilder content: @escaping (ViewStore<ViewState, ViewAction>) -> Content,
     file: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = nil
   ) {
-    self.init(store, removeDuplicates: ==, content: content, file: file, line: line)
+    self.init(store, removeDuplicates: ==, content: content, file: file, line: line, prefix: prefix)
   }
 }
 
