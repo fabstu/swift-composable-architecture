@@ -27,6 +27,7 @@
 - ``Reduce``
 - ``CombineReducers``
 - ``EmptyReducer``
+- ``ReducerReader``
 - ``BindingReducer``
 
 ### Reducer modifiers

@@ -129,14 +129,38 @@ private struct Root: Reducer {
       case featureB(Feature.Action)
     }
 
-    var body: some ReducerOf<Self> {
-      Scope(state: /State.featureA, action: /Action.featureA) {
-        Feature()
+    #if swift(>=5.7)
+      var body: some ReducerOf<Self> {
+        ReducerReader { state, _ in
+          switch state {
+          case .featureA:
+            Scope(state: /State.featureA, action: /Action.featureA) {
+              Feature()
+            }
+          case .featureB:
+            Scope(state: /State.featureB, action: /Action.featureB) {
+              Feature()
+            }
+          }
+        }
       }
-      Scope(state: /State.featureB, action: /Action.featureB) {
-        Feature()
+    #else
+      var body: Reduce<State, Action> {
+        ReducerReader { state, _ in
+          switch state {
+          case .featureA:
+            Scope(state: /State.featureA, action: /Action.featureA) {
+              Feature()
+            }
+          case .featureB:
+            Scope(state: /State.featureB, action: /Action.featureB) {
+              Feature()
+            }
+          }
+        }
+    
       }
-    }
+    #endif
   }
 }
 
