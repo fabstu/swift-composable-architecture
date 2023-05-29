@@ -20,6 +20,9 @@ import SwiftUI
 public struct IfLetStore<State, Action, Content: View>: View {
   private let content: (ViewStore<State?, Action>) -> Content
   private let store: Store<State?, Action>
+  private let file: StaticString
+  private let line: UInt
+  private let prefix: String?
 
   /// Initializes an ``IfLetStore`` view that computes content depending on if a store of optional
   /// state is `nil` or non-`nil`.
@@ -32,11 +35,17 @@ public struct IfLetStore<State, Action, Content: View>: View {
   public init<IfContent, ElseContent>(
     _ store: Store<State?, Action>,
     @ViewBuilder then ifContent: @escaping (_ store: Store<State, Action>) -> IfContent,
-    @ViewBuilder else elseContent: () -> ElseContent
+    @ViewBuilder else elseContent: () -> ElseContent,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "IfLetStore"
   ) where Content == _ConditionalContent<IfContent, ElseContent> {
     let store = store.invalidate { $0 == nil }
     self.store = store
     let elseContent = elseContent()
+    self.file = file
+    self.line = line
+    self.prefix = prefix
     self.content = { viewStore in
       if var state = viewStore.state {
         return ViewBuilder.buildEither(
@@ -67,10 +76,16 @@ public struct IfLetStore<State, Action, Content: View>: View {
   ///     is visible only when the optional state is non-`nil`.
   public init<IfContent>(
     _ store: Store<State?, Action>,
-    @ViewBuilder then ifContent: @escaping (_ store: Store<State, Action>) -> IfContent
+    @ViewBuilder then ifContent: @escaping (_ store: Store<State, Action>) -> IfContent,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "IfLetStore"
   ) where Content == IfContent? {
     let store = store.invalidate { $0 == nil }
     self.store = store
+    self.file = file
+    self.line = line
+    self.prefix = prefix
     self.content = { viewStore in
       if var state = viewStore.state {
         return ifContent(
@@ -190,7 +205,10 @@ public struct IfLetStore<State, Action, Content: View>: View {
       self.store,
       observe: { $0 },
       removeDuplicates: { ($0 != nil) == ($1 != nil) },
-      content: self.content
+      content: self.content,
+      file: file,
+      line: line,
+      prefix: prefix
     )
   }
 }

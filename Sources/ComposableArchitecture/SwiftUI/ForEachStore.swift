@@ -95,7 +95,10 @@ public struct ForEachStore<
   ///   - content: A function that can generate content given a store of an element.
   public init<EachContent>(
     _ store: Store<IdentifiedArray<ID, EachState>, (ID, EachAction)>,
-    @ViewBuilder content: @escaping (_ store: Store<EachState, EachAction>) -> EachContent
+    @ViewBuilder content: @escaping (_ store: Store<EachState, EachAction>) -> EachContent,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "ForEachStore"
   )
   where
     Data == IdentifiedArray<ID, EachState>,
@@ -108,8 +111,8 @@ public struct ForEachStore<
     self.content = WithViewStore(
       store,
       observe: { $0 },
-      removeDuplicates: { areOrderedSetsDuplicates($0.ids, $1.ids) }
-    ) { viewStore in
+      removeDuplicates: { areOrderedSetsDuplicates($0.ids, $1.ids) },
+      content: { viewStore in
       ForEach(viewStore.state, id: viewStore.state.id) { element in
         var element = element
         let id = element[keyPath: viewStore.state.id]
@@ -123,7 +126,7 @@ public struct ForEachStore<
           )
         )
       }
-    }
+      }, file: file, line: line, prefix: prefix)
   }
 
   public var body: some View {

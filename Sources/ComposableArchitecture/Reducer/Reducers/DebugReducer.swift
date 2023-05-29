@@ -1,5 +1,7 @@
 import Combine
 import Dispatch
+import Foundation
+import os
 
 extension Reducer {
   #if swift(>=5.8)
@@ -31,7 +33,10 @@ extension Reducer {
 
 private let printQueue = DispatchQueue(label: "co.pointfree.swift-composable-architecture.printer")
 
+fileprivate let logger = os.Logger(subsystem: Bundle.main.bundleIdentifier!, category: #fileID)
+
 public struct _ReducerPrinter<State, Action> {
+  
   private let _printChange: (_ receivedAction: Action, _ oldState: State, _ newState: State) -> Void
   @usableFromInline
   let queue: DispatchQueue
@@ -57,13 +62,13 @@ extension _ReducerPrinter {
       CustomDump.customDump(receivedAction, to: &target, indent: 2)
       target.write("\n")
       target.write(diff(oldState, newState).map { "\($0)\n" } ?? "  (No state changes)\n")
-      print(target)
+      logger.log("\n## \(target, privacy: .public)")
     }
   }
 
   public static var actionLabels: Self {
     Self { receivedAction, _, _ in
-      print("received action: \(debugCaseOutput(receivedAction))")
+      logger.log("\n## received action: \(debugCaseOutput(receivedAction), privacy: .public)")
     }
   }
 }

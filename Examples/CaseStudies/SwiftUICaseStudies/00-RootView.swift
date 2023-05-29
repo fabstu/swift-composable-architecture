@@ -174,6 +174,7 @@ struct RootView: View {
         )
       }
     }
+    .tcaSettings(.withRerenderLogging(.statistics))
   }
 }
 

@@ -55,22 +55,37 @@ import SwiftUI
 public struct SwitchStore<State, Action, Content: View>: View {
   public let store: Store<State, Action>
   public let content: (State) -> Content
+  private let file: StaticString
+  private let line: UInt
+  private let prefix: String?
 
   public init(
     _ store: Store<State, Action>,
-    @ViewBuilder content: @escaping (_ initialState: State) -> Content
+    @ViewBuilder content: @escaping (_ initialState: State) -> Content,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = "SwitchStore"
   ) {
     self.store = store
     self.content = content
+    self.file = file
+    self.line = line
+    self.prefix = prefix
   }
 
   public var body: some View {
     WithViewStore(
-      self.store, observe: { $0 }, removeDuplicates: { enumTag($0) == enumTag($1) }
-    ) { viewStore in
-      self.content(viewStore.state)
-        .environmentObject(StoreObservableObject(store: self.store))
-    }
+      self.store,
+      observe: { $0 },
+      removeDuplicates: { enumTag($0) == enumTag($1) },
+      content: { viewStore in
+        self.content(viewStore.state)
+          .environmentObject(StoreObservableObject(store: self.store))
+      },
+      file: file,
+      line: line,
+      prefix: prefix
+    )
   }
 }
 
@@ -79,6 +94,7 @@ public struct CaseLet<EnumState, EnumAction, CaseState, CaseAction, Content: Vie
   public let toCaseState: (EnumState) -> CaseState?
   public let fromCaseAction: (CaseAction) -> EnumAction
   public let content: (Store<CaseState, CaseAction>) -> Content
+  private let prefix: String?
 
   private let fileID: StaticString
   private let line: UInt
@@ -99,13 +115,15 @@ public struct CaseLet<EnumState, EnumAction, CaseState, CaseAction, Content: Vie
     action fromCaseAction: @escaping (CaseAction) -> EnumAction,
     @ViewBuilder then content: @escaping (_ store: Store<CaseState, CaseAction>) -> Content,
     fileID: StaticString = #fileID,
-    line: UInt = #line
+    line: UInt = #line,
+    prefix: String? = "CaseLet"
   ) {
     self.toCaseState = toCaseState
     self.fromCaseAction = fromCaseAction
     self.content = content
     self.fileID = fileID
     self.line = line
+    self.prefix = prefix
   }
 
   public var body: some View {
@@ -120,7 +138,10 @@ public struct CaseLet<EnumState, EnumAction, CaseState, CaseAction, Content: Vie
           fileID: self.fileID,
           line: self.line
         )
-      }
+      },
+      file: fileID,
+      line: line,
+      prefix: prefix
     )
   }
 }
@@ -136,12 +157,18 @@ extension CaseLet where EnumAction == CaseAction {
   ///     that is visible only when the switch store's state matches.
   public init(
     state toCaseState: @escaping (EnumState) -> CaseState?,
-    @ViewBuilder then content: @escaping (_ store: Store<CaseState, CaseAction>) -> Content
+    @ViewBuilder then content: @escaping (_ store: Store<CaseState, CaseAction>) -> Content,
+    file: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String = "CaseLet"
   ) {
     self.init(
       toCaseState,
       action: { $0 },
-      then: content
+      then: content,
+      fileID: file,
+      line: line,
+      prefix: prefix
     )
   }
 }

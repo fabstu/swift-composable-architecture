@@ -62,6 +62,9 @@ public struct NavigationStackStore<State, Action, Root: View, Destination: View>
   @_disfavoredOverload
   public init<D: View>(
     _ store: Store<StackState<State>, StackAction<State, Action>>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    prefix: String? = nil,
     @ViewBuilder root: () -> Root,
     @ViewBuilder destination: @escaping (_ initialState: State) -> D
   ) where Destination == SwitchStore<State, Action, D> {
@@ -77,10 +80,10 @@ public struct NavigationStackStore<State, Action, Root: View, Destination: View>
               return state
             },
             action: { .element(id: component.id, action: $0) }
-          )
-      ) { _ in
+        ),
+        content: { _ in
         destination(component.element)
-      }
+      }, file: fileID, line: line, prefix: prefix)
     }
     self._viewStore = StateObject(
       wrappedValue: ViewStore(
